@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bean Graph</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<style>
+  :root { --bg:#fafafa; --fg:#1d1d1f; --muted:#6b6b70; --panel:#fff; --line:#d9d9de;
+          --mine:#2f6fde; --dep:#8a8a92; --ghost:#c9c9ce; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16161a; --fg:#ececf0; --muted:#9a9aa2; --panel:#1f1f25; --line:#33333b;
+            --mine:#6b9bff; --dep:#7c7c86; --ghost:#4a4a52; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 system-ui,sans-serif; background:var(--bg); color:var(--fg);
+         display:grid; grid-template-rows:auto 1fr; height:100vh; }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 16px;
+           border-bottom:1px solid var(--line); background:var(--panel); }
+  header strong { margin-right:auto; }
+  input, select { font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px;
+                  background:var(--bg); color:var(--fg); }
+  main { display:grid; grid-template-columns:1fr 340px; min-height:0; }
+  #cy { min-height:0; }
+  aside { border-left:1px solid var(--line); background:var(--panel); padding:14px; overflow:auto; }
+  aside h2 { font-size:15px; margin:0 0 8px; word-break:break-all; }
+  dt { color:var(--muted); font-size:12px; margin-top:10px; } dd { margin:2px 0 0; word-break:break-all; }
+  .legend span { display:inline-flex; align-items:center; gap:4px; margin-right:10px; color:var(--muted); font-size:12px; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  @media (max-width:760px) { main { grid-template-columns:1fr; grid-template-rows:1fr 220px; }
+                             aside { border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <strong>Bean graph <span id="count" style="color:var(--muted);font-weight:400"></span></strong>
+  <label>Package <input id="pkg" value="com.example" size="14"></label>
+  <select id="mode">
+    <option value="mine">My beans + direct deps</option>
+    <option value="all">All beans (slow, noisy)</option>
+  </select>
+  <input id="search" placeholder="Find bean…" size="14">
+  <span class="legend">
+    <span><i class="dot" style="background:var(--mine)"></i>yours</span>
+    <span><i class="dot" style="background:var(--dep)"></i>framework</span>
+    <span><i class="dot" style="background:var(--ghost)"></i>injected, not a bean</span>
+  </span>
+</header>
+<main>
+  <div id="cy"></div>
+  <aside id="info"><p style="color:var(--muted)">Click a bean to see its type, scope, source and dependencies. Arrows point from a bean to what it needs.</p></aside>
+</main>
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let beans = {}, cy;
+
+async function load() {
+  const res = await fetch('/actuator/beans');
+  const json = await res.json();
+  beans = Object.values(json.contexts).reduce((acc, c) => Object.assign(acc, c.beans), {});
+  render();
+}
+
+function shortType(t) { return t ? t.split('.').pop().replace(/\$\$.*$/, '') : '?'; }
+
+function render() {
+  const pkg = document.getElementById('pkg').value.trim();
+  const mode = document.getElementById('mode').value;
+  const isMine = name => (beans[name]?.type || '').startsWith(pkg);
+
+  let names = Object.keys(beans);
+  if (mode === 'mine') {
+    const keep = new Set(names.filter(isMine));
+    [...keep].forEach(n => beans[n].dependencies.forEach(d => keep.add(d)));
+    names = [...keep];
+  }
+  const nodes = names.map(n => ({ data: {
+    id: n,
+    label: beans[n] ? n : shortType(n),
+    kind: !beans[n] ? 'ghost' : isMine(n) ? 'mine' : 'dep'
+  }}));
+  const ids = new Set(names);
+  const edges = names.flatMap(n => (beans[n]?.dependencies || [])
+    .filter(d => ids.has(d)).map(d => ({ data: { id: n + '->' + d, source: n, target: d }})));
+
+  document.getElementById('count').textContent =
+    `· showing ${nodes.length} of ${Object.keys(beans).length} beans`;
+
+  if (cy) cy.destroy();
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: [...nodes, ...edges],
+    style: [
+      { selector: 'node', style: { label: 'data(label)', 'font-size': 11, color: css('--fg'),
+        'text-valign': 'bottom', 'text-margin-y': 4, width: 18, height: 18, 'background-color': css('--dep') } },
+      { selector: 'node[kind="mine"]', style: { 'background-color': css('--mine'), width: 26, height: 26, 'font-weight': 'bold' } },
+      { selector: 'node[kind="ghost"]', style: { 'background-color': css('--ghost'), shape: 'round-rectangle' } },
+      { selector: 'edge', style: { width: 1.5, 'line-color': css('--line'), 'target-arrow-color': css('--line'),
+        'target-arrow-shape': 'triangle', 'curve-style': 'bezier' } },
+      { selector: '.hit', style: { 'border-width': 3, 'border-color': '#f5a623' } }
+    ],
+    layout: mode === 'mine'
+      ? { name: 'breadthfirst', directed: true, spacingFactor: 1.4, padding: 30 }
+      : { name: 'cose', animate: false, nodeRepulsion: 9000 }
+  });
+  cy.on('tap', 'node', e => showInfo(e.target.id()));
+}
+
+function showInfo(name) {
+  const b = beans[name];
+  const el = document.getElementById('info');
+  if (!b) {
+    el.innerHTML = `<h2>${name}</h2><p>Injected into a bean but not itself a registered bean definition. Spring resolves some types (like the ApplicationContext) directly.</p>`;
+    return;
+  }
+  const deps = b.dependencies.length ? b.dependencies.map(d => `• ${d}`).join('<br>') : '(none)';
+  el.innerHTML = `<h2>${name}</h2><dl>
+    <dt>Type</dt><dd>${b.type}</dd>
+    <dt>Scope</dt><dd>${b.scope}</dd>
+    <dt>Defined in</dt><dd>${b.resource || '(registered programmatically)'}</dd>
+    <dt>Aliases</dt><dd>${b.aliases.join(', ') || '(none)'}</dd>
+    <dt>Depends on</dt><dd>${deps}</dd></dl>`;
+}
+
+document.getElementById('mode').onchange = render;
+document.getElementById('pkg').onchange = render;
+document.getElementById('search').oninput = e => {
+  if (!cy) return;
+  const q = e.target.value.toLowerCase();
+  cy.nodes().removeClass('hit');
+  if (q) { const hits = cy.nodes().filter(n => n.id().toLowerCase().includes(q));
+           hits.addClass('hit'); if (hits.length) cy.animate({ fit: { eles: hits, padding: 80 } }); }
+};
+load().catch(err => document.getElementById('info').textContent = 'Could not load /actuator/beans: ' + err);
+</script>
+</body>
+</html>
