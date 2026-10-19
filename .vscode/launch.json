@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-BeansDemoApplication<beans-demo>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.example.beansdemo.BeansDemoApplication",
+            "projectName": "beans-demo",
+            "javaExec": "C:\\Program Files\\Java\\jdk-26.0.2\\bin\\java.exe",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
