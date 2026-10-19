@@ -30,7 +30,11 @@
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
-
+        <!-- Actuator: exposes /actuator/beans, /actuator/conditions, ... -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
