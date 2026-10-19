@@ -1,4 +1,4 @@
-package com.example.beansdemo;
+package com.example.beansdemo.Service;
 
 import java.time.Clock;
 import java.time.LocalTime;

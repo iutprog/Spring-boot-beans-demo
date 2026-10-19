@@ -1,8 +1,10 @@
-package com.example.beansdemo;
+package com.example.beansdemo.Controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.example.beansdemo.Service.GreetingService;
 
 @RestController
 public class GreetingController {

@@ -6,6 +6,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
+import com.example.beansdemo.Service.GreetingService;
+
 /**
  * Runs once after the context is fully started and prints the bean-vs-object difference.
  */
